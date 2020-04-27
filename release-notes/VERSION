@@ -4,6 +4,12 @@ Project: jackson-databind
 === Releases ===
 ------------------------------------------------------------------------
 
+2.6.7.4-cve-fix
+
+#1931: Block two more gadgets to exploit default typing issue (c3p0, CVE-2018-7489)
+#2460: Block one more gadget type (ehcache, CVE-2019-17267)
+  (reported by Fei Lu)
+
 2.6.7.4 (25-Oct-2020)
 
 Backported all CVE fixes up to 2.9.10.6
