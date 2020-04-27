@@ -41,6 +41,12 @@ public class BeanDeserializerFactory
 
     private final static Class<?>[] NO_VIEWS = new Class<?>[0];
 
+    // [databind#1855]
+    protected final static String PREFIX_SPRING = "org.springframework.";
+
+    // [databind#1931]
+    protected final static String PREFIX_C3P0 = "com.mchange.v2.c3p0.";
+
     /**
      * Set of well-known "nasty classes", deserialization of which is considered dangerous
      * and should (and is) prevented by default.
@@ -65,10 +71,10 @@ public class BeanDeserializerFactory
         s.add("java.util.logging.FileHandler");
         s.add("java.rmi.server.UnicastRemoteObject");
         // [databind#1737]; 3rd party
-        s.add("org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor");
+        // s.add("org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor"); // deprecated by [databind#1855]
         s.add("org.springframework.beans.factory.config.PropertyPathFactoryBean");
-        s.add("com.mchange.v2.c3p0.JndiRefForwardingDataSource");
-        s.add("com.mchange.v2.c3p0.WrapperConnectionPoolDataSource");
+        // s.add("com.mchange.v2.c3p0.JndiRefForwardingDataSource");     // deprecated by [databind#1931]
+        // s.add("com.mchange.v2.c3p0.WrapperConnectionPoolDataSource"); // - "" -
 
         // [databind#1855]: more 3rd party
         s.add("org.apache.tomcat.dbcp.dbcp2.BasicDataSource");
@@ -92,10 +98,11 @@ public class BeanDeserializerFactory
         s.add("com.sun.deploy.security.ruleset.DRSHelper");
         s.add("org.apache.axis2.jaxws.spi.handler.HandlerResolverImpl");
 
-        // [databind#2186]: yet more 3rd party gadgets
+        // [databind#2186], [databind#2670]: yet more 3rd party gadgets
         s.add("org.jboss.util.propertyeditor.DocumentEditor");
         s.add("org.apache.openjpa.ee.RegistryManagedRuntime");
         s.add("org.apache.openjpa.ee.JNDIManagedRuntime");
+        s.add("org.apache.openjpa.ee.WASRegistryManagedRuntime"); // [#2670] addition
         s.add("org.apache.axis2.transport.jms.JMSOutTransportInfo");
 
         // [databind#2326]
@@ -138,6 +145,58 @@ public class BeanDeserializerFactory
         // [databind#2498]: log4j-extras (1.2)
         s.add("org.apache.log4j.receivers.db.DriverManagerConnectionSource");
         s.add("org.apache.log4j.receivers.db.JNDIConnectionSource");
+
+        // [databind#2526]: some more ehcache
+        s.add("net.sf.ehcache.transaction.manager.selector.GenericJndiSelector");
+        s.add("net.sf.ehcache.transaction.manager.selector.GlassfishSelector");
+
+        // [databind#2620]: xbean-reflect
+        s.add("org.apache.xbean.propertyeditor.JndiConverter");
+
+        // [databind#2631]: shaded hikari-config
+        s.add("org.apache.hadoop.shaded.com.zaxxer.hikari.HikariConfig");
+
+        // [databind#2634]: ibatis-sqlmap, anteros-core
+        s.add("com.ibatis.sqlmap.engine.transaction.jta.JtaTransactionConfig");
+        s.add("br.com.anteros.dbcp.AnterosDBCPConfig");
+
+        // [databind#2642]: javax.swing (jdk)
+        s.add("javax.swing.JEditorPane");
+
+        // [databind#2648], [databind#2653]: shiro-core
+        s.add("org.apache.shiro.realm.jndi.JndiRealmFactory");
+        s.add("org.apache.shiro.jndi.JndiObjectFactory");
+
+        // [databind#2658]: ignite-jta (, quartz-core)
+        s.add("org.apache.ignite.cache.jta.jndi.CacheJndiTmLookup");
+        s.add("org.apache.ignite.cache.jta.jndi.CacheJndiTmFactory");
+        s.add("org.quartz.utils.JNDIConnectionProvider");
+
+        // [databind#2659]: aries.transaction.jms
+        s.add("org.apache.aries.transaction.jms.internal.XaPooledConnectionFactory");
+        s.add("org.apache.aries.transaction.jms.RecoverablePooledConnectionFactory");
+
+        // [databind#2660]: caucho-quercus
+        s.add("com.caucho.config.types.ResourceRef");
+
+        // [databind#2662]: aoju/bus-proxy
+        s.add("org.aoju.bus.proxy.provider.RmiProvider");
+        s.add("org.aoju.bus.proxy.provider.remoting.RmiProvider");
+
+        // [databind#2664]: activemq-core, activemq-pool, activemq-pool-jms
+
+        s.add("org.apache.activemq.ActiveMQConnectionFactory"); // core
+        s.add("org.apache.activemq.ActiveMQXAConnectionFactory");
+        s.add("org.apache.activemq.spring.ActiveMQConnectionFactory");
+        s.add("org.apache.activemq.spring.ActiveMQXAConnectionFactory");
+        s.add("org.apache.activemq.pool.JcaPooledConnectionFactory"); // pool
+        s.add("org.apache.activemq.pool.PooledConnectionFactory");
+        s.add("org.apache.activemq.pool.XaPooledConnectionFactory");
+        s.add("org.apache.activemq.jms.pool.XaPooledConnectionFactory"); // pool-jms
+        s.add("org.apache.activemq.jms.pool.JcaPooledConnectionFactory");
+
+        // [databind#2666]: apache/commons-jms
+        s.add("org.apache.commons.proxy.provider.remoting.RmiProvider");
 
         DEFAULT_NO_DESER_CLASS_NAMES = Collections.unmodifiableSet(s);
     }
@@ -951,13 +1010,47 @@ public class BeanDeserializerFactory
     {
         // There are certain nasty classes that could cause problems, mostly
         // via default typing -- catch them here.
-        String full = type.getRawClass().getName();
+        final Class<?> raw = type.getRawClass();
+        String full = raw.getName();
 
-        if (_cfgIllegalClassNames.contains(full)) {
-            String message = String.format("Illegal type (%s) to deserialize: prevented for security reasons",
-                    full);
-            throw ctxt.mappingException("Invalid type definition for type %s: %s",
-                    beanDesc, message);
-        }
+        main_check:
+        do {
+            if (_cfgIllegalClassNames.contains(full)) {
+                break;
+            }
+
+            // 18-Dec-2017, tatu: As per [databind#1855], need bit more sophisticated handling
+            //    for some Spring framework types
+            // 05-Jan-2017, tatu: ... also, only applies to classes, not interfaces
+            if (raw.isInterface()) {
+                ;
+            } else if (full.startsWith(PREFIX_SPRING)) {
+                for (Class<?> cls = raw; (cls != null) && (cls != Object.class); cls = cls.getSuperclass()){
+                    String name = cls.getSimpleName();
+                    // looking for "AbstractBeanFactoryPointcutAdvisor" but no point to allow any is there?
+                    if ("AbstractPointcutAdvisor".equals(name)
+                            // ditto  for "FileSystemXmlApplicationContext": block all ApplicationContexts
+                            || "AbstractApplicationContext".equals(name)) {
+                        break main_check;
+                    }
+                }
+            } else if (full.startsWith(PREFIX_C3P0)) {
+                // [databind#1737]; more 3rd party
+                // s.add("com.mchange.v2.c3p0.JndiRefForwardingDataSource");
+                // s.add("com.mchange.v2.c3p0.WrapperConnectionPoolDataSource");
+                // [databind#1931]; more 3rd party
+                // com.mchange.v2.c3p0.ComboPooledDataSource
+                // com.mchange.v2.c3p0.debug.AfterCloseLoggingComboPooledDataSource
+                if (full.endsWith("DataSource")) {
+                    break main_check;
+                }
+            }
+            return;
+        } while (false);
+
+        String message = String.format("Illegal type (%s) to deserialize: prevented for security reasons",
+                                       full);
+        throw ctxt.mappingException("Invalid type definition for type %s: %s",
+                                    beanDesc, message);
     }
 }
