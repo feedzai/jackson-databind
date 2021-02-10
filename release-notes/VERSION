@@ -6,6 +6,20 @@ Project: jackson-databind
 
 2.6.7.4-cve-fix
 
+#2986: Block two more gadget types
+ (reported by Al1ex@knownsec)
+#2996: Block 2 more gadget types (newrelic-agent)
+ (reported by Al1ex@knownsec)
+#2997: Block 2 more gadget types (tomcat/naming-factory-dbcp)
+#2998: Block 2 more gadget types (org.apache.tomcat/tomcat-dbcp)
+ (reported by Al1ex@knownsec)
+#3003: Block one more gadget type (xxx, CVE to be allocated)
+#3004: Block one more DBCP-related potential gadget class
+ (reported by Al1ex@knownsec)
+
+
+2.6.7.4-cve-fix
+
 #1931: Block two more gadgets to exploit default typing issue (c3p0, CVE-2018-7489)
 #2460: Block one more gadget type (ehcache, CVE-2019-17267)
   (reported by Fei Lu)
